@@ -26,7 +26,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
 
-class TripAdapter(var context: Context, private var trips: List<Trip>) : RecyclerView.Adapter<TripAdapter.ViewHolder>() {
+class TripAdapter(var context: Context, private var tripModels: List<TripModel>) : RecyclerView.Adapter<TripAdapter.ViewHolder>() {
     private var inflater: LayoutInflater = LayoutInflater.from(context)
     private var uploadViewVisible: Int = View.VISIBLE
     private var font = WheelLog.ThemeManager.getTypeface(context)
@@ -39,18 +39,23 @@ class TripAdapter(var context: Context, private var trips: List<Trip>) : Recycle
         uploadVisible = WheelLog.AppConfig.autoUploadEc
     }
 
+    fun updateTrips(tripModels: List<TripModel>) {
+        this.tripModels = tripModels
+        notifyDataSetChanged()
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val view: View = inflater.inflate(R.layout.list_trip_item, parent, false)
         return ViewHolder(view, font)
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val trip = trips[position]
+        val trip = tripModels[position]
         holder.bind(trip, uploadViewVisible)
     }
 
     override fun getItemCount(): Int {
-        return trips.size
+        return tripModels.size
     }
 
     class ViewHolder internal constructor(view: View, val font: Typeface) : RecyclerView.ViewHolder(view) {
@@ -61,44 +66,69 @@ class TripAdapter(var context: Context, private var trips: List<Trip>) : Recycle
         private var uploadProgressView: ProgressBar = view.findViewById(R.id.progressBar)
         private var shareView: ImageView = view.findViewById(R.id.shareButton)
 
+        private fun uploadViewEnabled(isEnabled: Boolean) {
+            uploadView.isEnabled = isEnabled
+            uploadView.imageAlpha = if (isEnabled) 0xFF else 0x20
+        }
+
+        
         private fun uploadInProgress(inProgress: Boolean) {
             uploadView.visibility = if (!inProgress) View.VISIBLE else View.GONE
             uploadProgressView.visibility = if (inProgress) View.VISIBLE else View.GONE
         }
 
-        fun bind(trip: Trip, uploadViewVisible: Int) {
-            nameView.text = trip.title
+        fun bind(tripModel: TripModel, uploadViewVisible: Int) {
+            nameView.text = tripModel.title
             nameView.typeface = font
-            descriptionView.text = trip.description
+            descriptionView.text = tripModel.description
             descriptionView.typeface = font
             uploadButtonLayout.visibility = uploadViewVisible
+            // check upload
+            if (uploadViewVisible == View.VISIBLE) {
+                GlobalScope.launch {
+                    // async find
+                    val trip = WheelLog.db.tripDao().getTripByFileName(tripModel.fileName)
+                    withContext(Dispatchers.Main) {
+                        uploadViewEnabled(trip != null && trip.ecId > 0)
+                    }
+                }
+            }
             uploadInProgress(false)
             uploadView.setOnClickListener {
                 uploadInProgress(true)
                 val inputStream: InputStream? = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                     // Android 9 or less
-                    FileInputStream(File(trip.mediaId))
+                    FileInputStream(File(tripModel.mediaId))
                 } else {
                     // Android 10+
-                    it.context.contentResolver.openInputStream(trip.uri)
+                    it.context.contentResolver.openInputStream(tripModel.uri)
                 }
                 if (inputStream == null) {
-                    Timber.i("Failed to create inputStream for %s", trip.title)
+                    Timber.i("Failed to create inputStream for %s", tripModel.title)
                     uploadInProgress(false)
                     return@setOnClickListener
                 }
                 val data = ByteStreams.toByteArray(inputStream)
-                ElectroClub.instance.uploadTrack(data, trip.title, false) {
+                ElectroClub.instance.uploadTrack(data, tripModel.title, false) {
                     MainScope().launch {
                         uploadInProgress(false)
                     }
                 }
                 inputStream.close()
+                uploadViewEnabled(false)
+                GlobalScope.launch {
+                    val success = ElectroClub.instance.uploadTrackAsync(data, tripModel.title, false)
+                    if (!success) {
+                        withContext(Dispatchers.Main) {
+                            uploadViewEnabled(true)
+                        }
+                    }
+                }
             }
             shareView.setOnClickListener {
                 val sendIntent: Intent = Intent().apply {
                     action = Intent.ACTION_SEND
-                    putExtra(Intent.EXTRA_STREAM, trip.uri)
+                    putExtra(Intent.EXTRA_STREAM, tripModel.uri)
                     type = "text/csv"
                 }
 

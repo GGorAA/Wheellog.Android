@@ -8,6 +8,9 @@ import android.content.res.Configuration;
 import com.cooper.wheellog.utils.NotificationUtil;
 import com.cooper.wheellog.utils.ThemeManager;
 import com.cooper.wheellog.utils.VolumeKeyController;
+import androidx.room.Room;
+
+import com.cooper.wheellog.data.AppDatabase;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -16,6 +19,7 @@ public class WheelLog extends Application {
     public static NotificationUtil Notifications;
     public static VolumeKeyController VolumeKeyController;
     public static ThemeManager ThemeManager;
+    public static AppDatabase db;
 
     @Override
     public void onCreate() {
@@ -34,6 +38,7 @@ public class WheelLog extends Application {
         Notifications = new NotificationUtil(base);
         VolumeKeyController = new VolumeKeyController(base);
         ThemeManager = new ThemeManager();
+		db = Room.databaseBuilder(base, AppDatabase.class, "db").build();
         super.attachBaseContext(base);
     }
 

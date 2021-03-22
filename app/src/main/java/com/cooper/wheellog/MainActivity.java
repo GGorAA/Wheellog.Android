@@ -536,6 +536,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        onDestroyProcess = true;
         stopPebbleService();
         stopGarminConnectIQ();
         stopLoggingService();
@@ -546,8 +547,7 @@ public class MainActivity extends AppCompatActivity {
         }
         WheelLog.ThemeManager.changeAppIcon(MainActivity.this);
         super.onDestroy();
-        onDestroyProcess = true;
-        new CountDownTimer(60000 /* 1 min */, 1000) {
+        new CountDownTimer(2 * 60 * 1000 /* 2 min */, 1000) {
             @Override
             public void onTick(long millisUntilFinished) {
                 if (!LoggingService.isInstanceCreated()) {
@@ -557,6 +557,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onFinish() {
+                Timber.wtf("I'll be back");
                 Timber.uproot(eventsLoggingTree);
                 eventsLoggingTree.close();
                 eventsLoggingTree = null;
@@ -668,8 +669,12 @@ public class MainActivity extends AppCompatActivity {
 
     //region services
     private void stopLoggingService() {
-        if (LoggingService.isInstanceCreated())
+        if (LoggingService.isInstanceCreated()) {
             toggleLoggingService();
+            if (!onDestroyProcess) {
+                pagerAdapter.updatePageOfTrips();
+            }
+        }
     }
 
     @NeedsPermission({Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE})
